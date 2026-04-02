@@ -1,0 +1,24 @@
+{
+  "categories": [
+    {
+      "id": "police",
+      "name": "สถานีตำรวจ",
+      "icon": "icons/police.png"
+    },
+    {
+      "id": "shop",
+      "name": "ร้านค้า",
+      "icon": "icons/shop.png"
+    }
+  ],
+  "markers": [
+    {
+      "id": 1,
+      "category": "police",
+      "title": "Mission Row PD",
+      "x": 1500,
+      "y": -3200,
+      "image": "images/pd1.jpg"
+    }
+  ]
+}

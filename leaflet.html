@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>GTA Map Manager</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+html, body { height:100%; margin:0; font-family:Arial; }
+#map { height:100%; }
+
+#sidebar{
+position:absolute;
+top:10px; left:60px;
+width:300px; max-height:95%;
+overflow-y:auto;
+background:#1e1e1e; color:white;
+padding:10px; border-radius:8px;
+z-index:1000;
+}
+
+.menu-section{margin-bottom:10px;border-radius:6px;overflow:hidden;background:#2a2a2a;}
+.menu-header{padding:10px;background:#333;cursor:pointer;font-weight:bold;}
+.menu-header:hover{background:#444;}
+.menu-content{padding:10px;display:none;}
+.menu-section.active .menu-content{display:block;}
+
+input,select,button{width:100%;margin-bottom:5px;padding:6px;}
+button{cursor:pointer;}
+
+#categoryFilters label{
+display:flex;
+align-items:center;
+gap:6px;
+margin-bottom:4px;
+}
+#categoryFilters input[type="checkbox"]{
+width:auto;
+margin:0;
+}
+
+/* popup */
+.leaflet-popup-content-wrapper{
+width:260px !important;
+max-width:260px !important;
+border-radius:12px;
+}
+.leaflet-popup-content{
+width:240px !important;
+margin:10px !important;
+}
+.popup-img{
+width:100%;
+height:150px;
+object-fit:cover;
+border-radius:6px;
+margin:6px 0;
+}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+<div class="menu-section">
+<div class="menu-header">📍 เพิ่มหมุด</div>
+<div class="menu-content">
+<input type="text" id="title" placeholder="ชื่อหมุด">
+<input type="text" id="image" placeholder="URL รูป">
+<select id="categorySelect"></select>
+<button onclick="startAddMarker()">วางหมุด</button>
+</div>
+</div>
+
+<div class="menu-section">
+<div class="menu-header">📂 หมวด</div>
+<div class="menu-content">
+<input type="text" id="newCategory" placeholder="ชื่อหมวด">
+<input type="text" id="newCategoryIcon" placeholder="URL icon">
+<button onclick="addCategory()">เพิ่ม</button>
+
+<select id="deleteCategorySelect"></select>
+<button onclick="deleteCategory()">ลบ</button>
+</div>
+</div>
+
+<div class="menu-section">
+<div class="menu-header">👁 แสดงหมวด</div>
+<div class="menu-content" id="categoryFilters"></div>
+</div>
+
+<div class="menu-section">
+<div class="menu-header">💾 Backup</div>
+<div class="menu-content">
+<button onclick="exportData()">Export</button>
+<input type="file" onchange="importData(event)">
+</div>
+</div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+/* ================= MAP ================= */
+
+var mapExtent=[0,-5010,3677,0];
+var mapMinZoom=0;
+var mapMaxZoom=5;
+
+var crs=L.CRS.Simple;
+crs.transformation = new L.Transformation(1, 0, -1, 0);
+
+var mapMinResolution=Math.pow(2,mapMaxZoom);
+crs.scale=function(z){return Math.pow(2,z)/mapMinResolution;};
+crs.zoom=function(s){return Math.log(s*mapMinResolution)/Math.LN2;};
+
+/* ✅ สร้าง map ก่อน */
+var map=L.map('map',{
+    minZoom:mapMinZoom,
+    maxZoom:mapMaxZoom,
+    crs:crs,
+    maxBoundsViscosity:0.3
+});
+
+/* bounds */
+var southWest=crs.unproject(L.point(mapExtent[0],mapExtent[1]));
+var northEast=crs.unproject(L.point(mapExtent[2],mapExtent[3]));
+var bounds=L.latLngBounds(southWest,northEast);
+
+/* tile */
+L.tileLayer('{z}/{x}/{y}.png',{
+    minZoom:mapMinZoom,
+    maxZoom:mapMaxZoom,
+    noWrap:true
+}).addTo(map);
+
+/* ✅ ตั้งค่าหลังสร้าง map */
+map.fitBounds(bounds);
+map.setMaxBounds(bounds.pad(0.5)); // สำคัญ!
+
+/* ================= DATA ================= */
+
+let markers=JSON.parse(localStorage.getItem("markers"))||[];
+let categories = JSON.parse(localStorage.getItem("categories")) || [
+    { name: "ทั่วไป", icon: "" }
+];
+
+categories = categories.map(c=>{
+    if(typeof c==="string"){ return { name:c, icon:"" }; }
+    return c;
+});
+
+let markerObjects=[];
+let visibleCategories=categories.map(c=>c.name);
+
+function saveData(){
+localStorage.setItem("markers",JSON.stringify(markers));
+localStorage.setItem("categories",JSON.stringify(categories));
+}
+
+/* ================= CATEGORY ================= */
+
+function refreshCategoryUI(){
+let select=document.getElementById("categorySelect");
+let deleteSelect=document.getElementById("deleteCategorySelect");
+let filterDiv=document.getElementById("categoryFilters");
+
+select.innerHTML="";
+deleteSelect.innerHTML="";
+filterDiv.innerHTML="";
+
+categories.forEach(cat=>{
+select.innerHTML+=`<option>${cat.name}</option>`;
+deleteSelect.innerHTML+=`<option>${cat.name}</option>`;
+filterDiv.innerHTML+=`
+<label>
+<input type="checkbox" checked onchange="toggleCategory('${cat.name}',this.checked)">
+${cat.name}
+</label>`;
+});
+
+visibleCategories=categories.map(c=>c.name);
+}
+
+function addCategory(){
+let name=document.getElementById("newCategory").value.trim();
+let icon=document.getElementById("newCategoryIcon").value.trim();
+if(!name) return;
+categories.push({ name, icon });
+saveData();
+refreshCategoryUI();
+refreshMarkers();
+}
+
+function deleteCategory(){
+let selected=document.getElementById("deleteCategorySelect").value;
+categories=categories.filter(c=>c.name!==selected);
+markers=markers.filter(m=>m.category!==selected);
+saveData();
+refreshCategoryUI();
+refreshMarkers();
+}
+
+/* ================= MARKER ================= */
+
+function startAddMarker(){
+map.once("click",function(e){
+let title=document.getElementById("title").value;
+let image=document.getElementById("image").value;
+let category=document.getElementById("categorySelect").value;
+
+markers.push({ lat:e.latlng.lat, lng:e.latlng.lng, title, image, category });
+saveData();
+refreshMarkers();
+});
+}
+
+function refreshMarkers(){
+markerObjects.forEach(m=>map.removeLayer(m));
+markerObjects=[];
+
+markers.forEach((m,index)=>{
+if(!visibleCategories.includes(m.category)) return;
+
+let marker=L.marker([m.lat,m.lng]).addTo(map);
+
+marker.bindPopup(`
+<b>${m.title}</b>
+${m.image?`<img src="${m.image}" class="popup-img">`:""}
+<br>${m.category}<br>
+<button onclick="deleteMarker(${index})">ลบ</button>
+`);
+
+markerObjects.push(marker);
+});
+}
+
+function deleteMarker(index){
+markers.splice(index,1);
+saveData();
+refreshMarkers();
+}
+
+function toggleCategory(cat,show){
+if(show){
+visibleCategories.push(cat);
+}else{
+visibleCategories=visibleCategories.filter(c=>c!==cat);
+}
+refreshMarkers();
+}
+
+function exportData(){
+let blob=new Blob([JSON.stringify({markers,categories})]);
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="backup.json";
+a.click();
+}
+
+function importData(e){
+let reader=new FileReader();
+reader.onload=function(evt){
+let data=JSON.parse(evt.target.result);
+markers=data.markers||[];
+categories=data.categories||[];
+saveData();
+refreshCategoryUI();
+refreshMarkers();
+};
+reader.readAsText(e.target.files[0]);
+}
+
+/* init */
+refreshCategoryUI();
+refreshMarkers();
+
+</script>
+</body>
+</html>
