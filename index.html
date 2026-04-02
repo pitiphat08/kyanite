@@ -35,23 +35,39 @@ align-items:center;
 gap:6px;
 margin-bottom:4px;
 }
+#categoryFilters input[type="checkbox"]{
+width:auto;
+margin:0;
+}
 
-/* popup */
+/* ================= POPUP FIX ================= */
+
+/* ล็อคความกว้าง popup */
 .leaflet-popup-content-wrapper{
 width:260px !important;
 max-width:260px !important;
 border-radius:12px;
 }
+
 .leaflet-popup-content{
 width:240px !important;
 margin:10px !important;
 }
+
+/* กล่องภายใน */
+.custom-popup{
+width:100%;
+}
+
+/* ล็อครูป */
 .popup-img{
 width:100%;
 height:150px;
 object-fit:cover;
 border-radius:6px;
-margin:6px 0;
+display:block;
+margin-top:6px;
+margin-bottom:6px;
 }
 </style>
 </head>
@@ -63,33 +79,33 @@ margin:6px 0;
 <div class="menu-header">📍 เพิ่มหมุด</div>
 <div class="menu-content">
 <input type="text" id="title" placeholder="ชื่อหมุด">
-<input type="text" id="image" placeholder="URL รูป">
+<input type="text" id="image" placeholder="URL รูปแสดงใน Popup (เว้นว่างได้)">
 <select id="categorySelect"></select>
-<button onclick="startAddMarker()">วางหมุด</button>
+<button onclick="startAddMarker()">คลิกเพื่อวางหมุด</button>
 </div>
 </div>
 
 <div class="menu-section">
-<div class="menu-header">📂 หมวด</div>
+<div class="menu-header">📂 จัดการหมวดหมู่</div>
 <div class="menu-content">
-<input type="text" id="newCategory" placeholder="ชื่อหมวด">
-<input type="text" id="newCategoryIcon" placeholder="URL icon">
-<button onclick="addCategory()">เพิ่ม</button>
+<input type="text" id="newCategory" placeholder="ชื่อหมวดใหม่">
+<input type="text" id="newCategoryIcon" placeholder="URL icon หมวด (ใช้แสดงบนแผนที่)">
+<button onclick="addCategory()">เพิ่มหมวด</button>
 
 <select id="deleteCategorySelect"></select>
-<button onclick="deleteCategory()">ลบ</button>
+<button onclick="deleteCategory()">ลบหมวดที่เลือก</button>
 </div>
 </div>
 
 <div class="menu-section">
-<div class="menu-header">👁 แสดงหมวด</div>
+<div class="menu-header">👁 เลือกหมวดที่แสดง</div>
 <div class="menu-content" id="categoryFilters"></div>
 </div>
 
 <div class="menu-section">
 <div class="menu-header">💾 Backup</div>
 <div class="menu-content">
-<button onclick="exportData()">Export</button>
+<button onclick="exportData()">Export JSON</button>
 <input type="file" onchange="importData(event)">
 </div>
 </div>
@@ -109,31 +125,25 @@ var mapMinZoom=0;
 var mapMaxZoom=5;
 
 var crs=L.CRS.Simple;
-crs.transformation = new L.Transformation(1, 0, -1, 0);
+crs.transformation=new L.Transformation(1,-mapExtent[0],-1,mapExtent[3]);
 
 var mapMinResolution=Math.pow(2,mapMaxZoom);
 crs.scale=function(z){return Math.pow(2,z)/mapMinResolution;};
 crs.zoom=function(s){return Math.log(s*mapMinResolution)/Math.LN2;};
 
-var map=L.map('map',{
-    minZoom:mapMinZoom,
-    maxZoom:mapMaxZoom,
-    crs:crs,
-    maxBoundsViscosity:0.3
-});
+var map=L.map('map',{minZoom:mapMinZoom,maxZoom:mapMaxZoom,crs:crs,maxBoundsViscosity:1.0});
 
 var southWest=crs.unproject(L.point(mapExtent[0],mapExtent[1]));
 var northEast=crs.unproject(L.point(mapExtent[2],mapExtent[3]));
 var bounds=L.latLngBounds(southWest,northEast);
 
 L.tileLayer('{z}/{x}/{y}.png',{
-    minZoom:mapMinZoom,
-    maxZoom:mapMaxZoom,
-    noWrap:true
+minZoom:mapMinZoom,maxZoom:mapMaxZoom,
+noWrap:true,bounds:bounds
 }).addTo(map);
 
 map.fitBounds(bounds);
-map.setMaxBounds(bounds.pad(0.5));
+map.setMaxBounds(bounds);
 
 /* ================= DATA ================= */
 
@@ -147,6 +157,10 @@ categories = categories.map(c=>{
     return c;
 });
 
+if(categories.length===0){
+    categories=[{ name:"ทั่วไป", icon:"" }];
+}
+
 let markerObjects=[];
 let visibleCategories=categories.map(c=>c.name);
 
@@ -158,6 +172,7 @@ localStorage.setItem("categories",JSON.stringify(categories));
 /* ================= CATEGORY ================= */
 
 function refreshCategoryUI(){
+
 let select=document.getElementById("categorySelect");
 let deleteSelect=document.getElementById("deleteCategorySelect");
 let filterDiv=document.getElementById("categoryFilters");
@@ -167,25 +182,24 @@ deleteSelect.innerHTML="";
 filterDiv.innerHTML="";
 
 categories.forEach(cat=>{
-select.innerHTML+=`<option>${cat.name}</option>`;
-deleteSelect.innerHTML+=`<option>${cat.name}</option>`;
+select.innerHTML+=`<option value="${cat.name}">${cat.name}</option>`;
+deleteSelect.innerHTML+=`<option value="${cat.name}">${cat.name}</option>`;
 filterDiv.innerHTML+=`
 <label>
 <input type="checkbox" checked onchange="toggleCategory('${cat.name}',this.checked)">
+${cat.icon?`<img src="${cat.icon}" width="16">`:""}
 ${cat.name}
 </label>`;
 });
 
-visibleCategories=[...categories.map(c=>c.name)];
+visibleCategories=categories.map(c=>c.name);
 }
 
 function addCategory(){
 let name=document.getElementById("newCategory").value.trim();
 let icon=document.getElementById("newCategoryIcon").value.trim();
-
 if(!name) return alert("ห้ามชื่อว่าง");
 if(categories.some(c=>c.name===name)) return alert("ชื่อซ้ำ");
-
 categories.push({ name, icon });
 saveData();
 refreshCategoryUI();
@@ -194,11 +208,12 @@ refreshMarkers();
 
 function deleteCategory(){
 let selected=document.getElementById("deleteCategorySelect").value;
-if(!confirm("ลบหมวดนี้?")) return;
-
+if(!confirm("ลบหมวดนี้?"))return;
 categories=categories.filter(c=>c.name!==selected);
 markers=markers.filter(m=>m.category!==selected);
-
+if(categories.length===0){
+categories=[{ name:"ทั่วไป", icon:"" }];
+}
 saveData();
 refreshCategoryUI();
 refreshMarkers();
@@ -207,13 +222,11 @@ refreshMarkers();
 /* ================= MARKER ================= */
 
 function startAddMarker(){
-alert("คลิกบนแผนที่เพื่อวางหมุด");
-
+alert("คลิกที่แผนที่เพื่อวางหมุด");
 map.once("click",function(e){
-let title=document.getElementById("title").value;
-let image=document.getElementById("image").value;
+let title=document.getElementById("title").value.trim();
+let image=document.getElementById("image").value.trim();
 let category=document.getElementById("categorySelect").value;
-
 markers.push({ lat:e.latlng.lat, lng:e.latlng.lng, title, image, category });
 saveData();
 refreshMarkers();
@@ -221,22 +234,41 @@ refreshMarkers();
 }
 
 function refreshMarkers(){
+
 markerObjects.forEach(m=>map.removeLayer(m));
 markerObjects=[];
 
 markers.forEach((m,index)=>{
-if(!visibleCategories.includes(m.category)) return;
 
-let marker=L.marker([m.lat,m.lng]).addTo(map);
+if(!visibleCategories.includes(m.category))return;
+
+let categoryObj = categories.find(c=>c.name===m.category);
+let marker;
+
+if(categoryObj && categoryObj.icon){
+let customIcon=L.icon({
+iconUrl:categoryObj.icon,
+iconSize:[40,40],
+iconAnchor:[20,40]
+});
+marker=L.marker([m.lat,m.lng],{icon:customIcon});
+}else{
+marker=L.marker([m.lat,m.lng]);
+}
+
+marker.addTo(map);
 
 marker.bindPopup(`
+<div class="custom-popup">
 <b>${m.title}</b>
 ${m.image?`<img src="${m.image}" class="popup-img">`:""}
-<br>${m.category}<br>
-<button onclick="deleteMarker(${index})">ลบ</button>
+หมวด: ${m.category}<br>
+<button onclick="deleteMarker(${index})">ลบหมุด</button>
+</div>
 `);
 
 markerObjects.push(marker);
+
 });
 }
 
@@ -248,47 +280,45 @@ refreshMarkers();
 
 function toggleCategory(cat,show){
 if(show){
-    if(!visibleCategories.includes(cat)){
-        visibleCategories.push(cat);
-    }
+if(!visibleCategories.includes(cat))
+visibleCategories.push(cat);
 }else{
-    visibleCategories = visibleCategories.filter(c=>c!==cat);
+visibleCategories=visibleCategories.filter(c=>c!==cat);
 }
 refreshMarkers();
 }
 
-/* ================= BACKUP ================= */
-
 function exportData(){
-let blob=new Blob([JSON.stringify({markers,categories})]);
+let data={markers,categories};
+let blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+let url=URL.createObjectURL(blob);
 let a=document.createElement("a");
-a.href=URL.createObjectURL(blob);
-a.download="backup.json";
+a.href=url;
+a.download="map-backup.json";
 a.click();
+URL.revokeObjectURL(url);
 }
 
-function importData(e){
+function importData(event){
+let file=event.target.files[0];
 let reader=new FileReader();
-reader.onload=function(evt){
-let data=JSON.parse(evt.target.result);
-markers=data.markers||[];
-categories=data.categories||[];
+reader.onload=function(e){
+let data=JSON.parse(e.target.result);
+markers=Array.isArray(data.markers)?data.markers:[];
+categories=Array.isArray(data.categories)?data.categories:[{name:"ทั่วไป",icon:""}];
 saveData();
 refreshCategoryUI();
 refreshMarkers();
 };
-reader.readAsText(e.target.files[0]);
+reader.readAsText(file);
 }
 
-/* ================= MENU TOGGLE ================= */
-
 document.querySelectorAll(".menu-header").forEach(header=>{
-    header.addEventListener("click",()=>{
-        header.parentElement.classList.toggle("active");
-    });
+header.addEventListener("click",()=>{
+header.parentElement.classList.toggle("active");
+});
 });
 
-/* init */
 refreshCategoryUI();
 refreshMarkers();
 
