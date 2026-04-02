@@ -122,12 +122,12 @@ select.innerHTML="";
 filterDiv.innerHTML="";
 
 categories.forEach(cat=>{
-select.innerHTML+=`<option>${cat}</option>`;
+select.innerHTML+=`<option value="${cat}">${cat}</option>`;
 filterDiv.innerHTML+=`
 <label>
 <input type="checkbox" checked onchange="toggleCategory('${cat}',this.checked)">
 ${cat}
-</label>`;
+</label><br>`;
 });
 }
 
@@ -138,6 +138,8 @@ if(categories.includes(name)) return alert("ซ้ำ");
 
 categories.push(name);
 visibleCategories.push(name);
+
+document.getElementById("newCategory").value="";
 refreshCategoryUI();
 refreshMarkers();
 }
@@ -147,29 +149,52 @@ refreshMarkers();
 function startAddMarker(){
 alert("คลิกบนแผนที่");
 
-map.once("click",function(e){
-let title=document.getElementById("title").value;
-let image=document.getElementById("image").value;
+map.once("click",async function(e){
+
+let title=document.getElementById("title").value.trim();
+let image=document.getElementById("image").value.trim();
 let category=document.getElementById("categorySelect").value;
 
-db.collection("markers").add({
+if(!title) return alert("กรอกชื่อก่อน");
+
+try{
+await db.collection("markers").add({
 lat:e.latlng.lat,
 lng:e.latlng.lng,
 title,
 image,
-category
+category,
+createdAt:new Date()
 });
+
+// reset input
+document.getElementById("title").value="";
+document.getElementById("image").value="";
+
+alert("เพิ่มหมุดสำเร็จ");
+
+}catch(err){
+console.error(err);
+alert("เพิ่มไม่สำเร็จ");
+}
+
 });
 }
 
 /* 🔥 realtime sync */
-db.collection("markers").onSnapshot(snapshot=>{
+
+db.collection("markers").orderBy("createdAt","desc")
+.onSnapshot(snapshot=>{
 markers=[];
 snapshot.forEach(doc=>{
 markers.push({id:doc.id,...doc.data()});
 });
 refreshMarkers();
+},err=>{
+console.error("Firestore error:",err);
 });
+
+/* render */
 
 function refreshMarkers(){
 markerObjects.forEach(m=>map.removeLayer(m));
@@ -191,9 +216,20 @@ markerObjects.push(marker);
 });
 }
 
-function deleteMarker(id){
-db.collection("markers").doc(id).delete();
+/* delete */
+
+async function deleteMarker(id){
+if(!confirm("ลบจริง?")) return;
+
+try{
+await db.collection("markers").doc(id).delete();
+}catch(err){
+console.error(err);
+alert("ลบไม่สำเร็จ");
 }
+}
+
+/* filter */
 
 function toggleCategory(cat,show){
 if(show){
