@@ -10,6 +10,7 @@
 html, body { height:100%; margin:0; font-family:Arial; }
 #map { height:100%; }
 
+/* SIDEBAR */
 #sidebar{
 position:absolute;
 top:10px; left:60px;
@@ -20,20 +21,60 @@ padding:10px; border-radius:8px;
 z-index:1000;
 }
 
-.menu-section{margin-bottom:10px;border-radius:6px;overflow:hidden;background:#2a2a2a;}
-.menu-header{padding:10px;background:#333;cursor:pointer;font-weight:bold;}
-.menu-header:hover{background:#444;}
-.menu-content{padding:10px;display:none;}
-.menu-section.active .menu-content{display:block;}
+.menu-section{
+margin-bottom:10px;
+border-radius:6px;
+overflow:hidden;
+background:#2a2a2a;
+}
 
-input,select,button{width:100%;margin-bottom:5px;padding:6px;}
+.menu-header{
+padding:10px;
+background:#333;
+cursor:pointer;
+font-weight:bold;
+}
+
+.menu-header:hover{background:#444;}
+
+.menu-content{
+padding:10px;
+display:none;
+}
+
+.menu-section.active .menu-content{
+display:block;
+}
+
+input,select,button{
+width:100%;
+margin-bottom:5px;
+padding:6px;
+}
+
 button{cursor:pointer;}
 
+/* ===== หมวดหมู่ ===== */
 #categoryFilters label{
 display:flex;
 align-items:center;
+justify-content:space-between;
+gap:8px;
+margin-bottom:6px;
+padding:5px 8px;
+background:#2f2f2f;
+border-radius:4px;
+}
+
+.category-left{
+display:flex;
+align-items:center;
 gap:6px;
-margin-bottom:4px;
+}
+
+#categoryFilters input[type="checkbox"]{
+width:auto;
+margin:0;
 }
 
 /* popup */
@@ -42,10 +83,12 @@ width:260px !important;
 max-width:260px !important;
 border-radius:12px;
 }
+
 .leaflet-popup-content{
 width:240px !important;
 margin:10px !important;
 }
+
 .popup-img{
 width:100%;
 height:150px;
@@ -148,7 +191,7 @@ categories = categories.map(c=>{
 });
 
 let markerObjects=[];
-let visibleCategories=categories.map(c=>c.name);
+let visibleCategories=[];
 
 function saveData(){
 localStorage.setItem("markers",JSON.stringify(markers));
@@ -166,17 +209,23 @@ select.innerHTML="";
 deleteSelect.innerHTML="";
 filterDiv.innerHTML="";
 
+visibleCategories=[];
+
 categories.forEach(cat=>{
 select.innerHTML+=`<option>${cat.name}</option>`;
 deleteSelect.innerHTML+=`<option>${cat.name}</option>`;
+
+visibleCategories.push(cat.name);
+
 filterDiv.innerHTML+=`
 <label>
+<div class="category-left">
+${cat.icon ? `<img src="${cat.icon}" width="16">` : ""}
+<span>${cat.name}</span>
+</div>
 <input type="checkbox" checked onchange="toggleCategory('${cat.name}',this.checked)">
-${cat.name}
 </label>`;
 });
-
-visibleCategories=[...categories.map(c=>c.name)];
 }
 
 function addCategory(){
@@ -280,12 +329,12 @@ refreshMarkers();
 reader.readAsText(e.target.files[0]);
 }
 
-/* ================= MENU TOGGLE ================= */
+/* ================= MENU ================= */
 
 document.querySelectorAll(".menu-header").forEach(header=>{
-    header.addEventListener("click",()=>{
-        header.parentElement.classList.toggle("active");
-    });
+header.addEventListener("click",()=>{
+header.parentElement.classList.toggle("active");
+});
 });
 
 /* init */
