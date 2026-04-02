@@ -20,54 +20,41 @@ padding:10px; border-radius:8px;
 z-index:1000;
 }
 
-.menu-section{margin-bottom:10px;border-radius:6px;overflow:hidden;background:#2a2a2a;}
+.menu-section{margin-bottom:10px;border-radius:6px;background:#2a2a2a;overflow:hidden;}
 .menu-header{padding:10px;background:#333;cursor:pointer;font-weight:bold;}
 .menu-header:hover{background:#444;}
-.menu-content{padding:10px;display:none;}
+.menu-content{display:none;padding:10px;}
 .menu-section.active .menu-content{display:block;}
 
 input,select,button{width:100%;margin-bottom:5px;padding:6px;}
 button{cursor:pointer;}
 
+/* CATEGORY UI */
 #categoryFilters label{
+display:flex;
+justify-content:space-between;
+align-items:center;
+background:#333;
+padding:6px 10px;
+border-radius:6px;
+margin-bottom:5px;
+cursor:pointer;
+}
+#categoryFilters label:hover{background:#444;}
+
+.cat-left{
 display:flex;
 align-items:center;
 gap:6px;
-margin-bottom:4px;
-}
-#categoryFilters input[type="checkbox"]{
-width:auto;
-margin:0;
 }
 
-/* ================= POPUP FIX ================= */
-
-/* ล็อคความกว้าง popup */
-.leaflet-popup-content-wrapper{
-width:260px !important;
-max-width:260px !important;
-border-radius:12px;
-}
-
-.leaflet-popup-content{
-width:240px !important;
-margin:10px !important;
-}
-
-/* กล่องภายใน */
-.custom-popup{
-width:100%;
-}
-
-/* ล็อครูป */
+/* popup */
 .popup-img{
 width:100%;
 height:150px;
 object-fit:cover;
 border-radius:6px;
-display:block;
-margin-top:6px;
-margin-bottom:6px;
+margin:6px 0;
 }
 </style>
 </head>
@@ -78,36 +65,24 @@ margin-bottom:6px;
 <div class="menu-section">
 <div class="menu-header">📍 เพิ่มหมุด</div>
 <div class="menu-content">
-<input type="text" id="title" placeholder="ชื่อหมุด">
-<input type="text" id="image" placeholder="URL รูปแสดงใน Popup (เว้นว่างได้)">
+<input id="title" placeholder="ชื่อหมุด">
+<input id="image" placeholder="URL รูป">
 <select id="categorySelect"></select>
-<button onclick="startAddMarker()">คลิกเพื่อวางหมุด</button>
+<button onclick="startAddMarker()">วางหมุด</button>
 </div>
 </div>
 
 <div class="menu-section">
-<div class="menu-header">📂 จัดการหมวดหมู่</div>
+<div class="menu-header">📂 หมวด</div>
 <div class="menu-content">
-<input type="text" id="newCategory" placeholder="ชื่อหมวดใหม่">
-<input type="text" id="newCategoryIcon" placeholder="URL icon หมวด (ใช้แสดงบนแผนที่)">
-<button onclick="addCategory()">เพิ่มหมวด</button>
-
-<select id="deleteCategorySelect"></select>
-<button onclick="deleteCategory()">ลบหมวดที่เลือก</button>
+<input id="newCategory" placeholder="ชื่อหมวด">
+<button onclick="addCategory()">เพิ่ม</button>
 </div>
 </div>
 
 <div class="menu-section">
-<div class="menu-header">👁 เลือกหมวดที่แสดง</div>
+<div class="menu-header">👁 แสดงหมวด</div>
 <div class="menu-content" id="categoryFilters"></div>
-</div>
-
-<div class="menu-section">
-<div class="menu-header">💾 Backup</div>
-<div class="menu-content">
-<button onclick="exportData()">Export JSON</button>
-<input type="file" onchange="importData(event)">
-</div>
 </div>
 
 </div>
@@ -115,106 +90,85 @@ margin-bottom:6px;
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script>
+
+/* ================= FIREBASE ================= */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC4QDd8ZI6l8Ua0EakNY7dsxxDyrwDUlgk",
+  authDomain: "kyanite-9a82a.firebaseapp.com",
+  projectId: "kyanite-9a82a",
+  storageBucket: "kyanite-9a82a.firebasestorage.app",
+  messagingSenderId: "410749272189",
+  appId: "1:410749272189:web:64ec3562d3b75a961e7114"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 /* ================= MAP ================= */
 
 var mapExtent=[0,-5010,3677,0];
-var mapMinZoom=0;
-var mapMaxZoom=5;
-
 var crs=L.CRS.Simple;
-crs.transformation=new L.Transformation(1,-mapExtent[0],-1,mapExtent[3]);
+crs.transformation = new L.Transformation(1, 0, -1, 0);
 
-var mapMinResolution=Math.pow(2,mapMaxZoom);
-crs.scale=function(z){return Math.pow(2,z)/mapMinResolution;};
-crs.zoom=function(s){return Math.log(s*mapMinResolution)/Math.LN2;};
-
-var map=L.map('map',{minZoom:mapMinZoom,maxZoom:mapMaxZoom,crs:crs,maxBoundsViscosity:1.0});
+var map=L.map('map',{minZoom:0,maxZoom:5,crs:crs});
 
 var southWest=crs.unproject(L.point(mapExtent[0],mapExtent[1]));
 var northEast=crs.unproject(L.point(mapExtent[2],mapExtent[3]));
 var bounds=L.latLngBounds(southWest,northEast);
 
-L.tileLayer('{z}/{x}/{y}.png',{
-minZoom:mapMinZoom,maxZoom:mapMaxZoom,
-noWrap:true,bounds:bounds
-}).addTo(map);
+// ⚠️ แก้ path ตามโฟลเดอร์ของคุณ
+L.tileLayer('./{z}/{x}/{y}.png',{noWrap:true}).addTo(map);
 
 map.fitBounds(bounds);
-map.setMaxBounds(bounds);
+map.setMaxBounds(bounds.pad(0.5));
 
 /* ================= DATA ================= */
 
-let markers=JSON.parse(localStorage.getItem("markers"))||[];
-let categories = JSON.parse(localStorage.getItem("categories")) || [
-    { name: "ทั่วไป", icon: "" }
-];
-
-categories = categories.map(c=>{
-    if(typeof c==="string"){ return { name:c, icon:"" }; }
-    return c;
-});
-
-if(categories.length===0){
-    categories=[{ name:"ทั่วไป", icon:"" }];
-}
-
+let markers=[];
+let categories=["ทั่วไป"];
+let visibleCategories=[...categories];
 let markerObjects=[];
-let visibleCategories=categories.map(c=>c.name);
-
-function saveData(){
-localStorage.setItem("markers",JSON.stringify(markers));
-localStorage.setItem("categories",JSON.stringify(categories));
-}
 
 /* ================= CATEGORY ================= */
 
 function refreshCategoryUI(){
-
 let select=document.getElementById("categorySelect");
-let deleteSelect=document.getElementById("deleteCategorySelect");
 let filterDiv=document.getElementById("categoryFilters");
 
 select.innerHTML="";
-deleteSelect.innerHTML="";
 filterDiv.innerHTML="";
 
 categories.forEach(cat=>{
-select.innerHTML+=`<option value="${cat.name}">${cat.name}</option>`;
-deleteSelect.innerHTML+=`<option value="${cat.name}">${cat.name}</option>`;
+
+select.innerHTML+=`<option value="${cat}">${cat}</option>`;
+
+let checked = visibleCategories.includes(cat) ? "checked" : "";
+
 filterDiv.innerHTML+=`
 <label>
-<input type="checkbox" checked onchange="toggleCategory('${cat.name}',this.checked)">
-${cat.icon?`<img src="${cat.icon}" width="16">`:""}
-${cat.name}
+    <div class="cat-left">
+        <span>${cat}</span>
+    </div>
+    <input type="checkbox" ${checked} onchange="toggleCategory('${cat}',this.checked)">
 </label>`;
-});
 
-visibleCategories=categories.map(c=>c.name);
+});
 }
 
 function addCategory(){
 let name=document.getElementById("newCategory").value.trim();
-let icon=document.getElementById("newCategoryIcon").value.trim();
-if(!name) return alert("ห้ามชื่อว่าง");
-if(categories.some(c=>c.name===name)) return alert("ชื่อซ้ำ");
-categories.push({ name, icon });
-saveData();
-refreshCategoryUI();
-refreshMarkers();
-}
+if(!name) return alert("ห้ามว่าง");
+if(categories.includes(name)) return alert("ซ้ำ");
 
-function deleteCategory(){
-let selected=document.getElementById("deleteCategorySelect").value;
-if(!confirm("ลบหมวดนี้?"))return;
-categories=categories.filter(c=>c.name!==selected);
-markers=markers.filter(m=>m.category!==selected);
-if(categories.length===0){
-categories=[{ name:"ทั่วไป", icon:"" }];
-}
-saveData();
+categories.push(name);
+visibleCategories.push(name);
+
+document.getElementById("newCategory").value="";
 refreshCategoryUI();
 refreshMarkers();
 }
@@ -222,105 +176,108 @@ refreshMarkers();
 /* ================= MARKER ================= */
 
 function startAddMarker(){
-alert("คลิกที่แผนที่เพื่อวางหมุด");
-map.once("click",function(e){
+alert("คลิกบนแผนที่");
+
+map.once("click",async function(e){
+
 let title=document.getElementById("title").value.trim();
 let image=document.getElementById("image").value.trim();
 let category=document.getElementById("categorySelect").value;
-markers.push({ lat:e.latlng.lat, lng:e.latlng.lng, title, image, category });
-saveData();
-refreshMarkers();
+
+if(!title) return alert("กรอกชื่อก่อน");
+
+try{
+await db.collection("markers").add({
+lat:e.latlng.lat,
+lng:e.latlng.lng,
+title,
+image,
+category,
+createdAt: Date.now()
+});
+
+// reset
+
+document.getElementById("title").value="";
+document.getElementById("image").value="";
+
+alert("เพิ่มหมุดสำเร็จ");
+
+}catch(err){
+console.error(err);
+alert("เพิ่มไม่สำเร็จ");
+}
+
 });
 }
 
-function refreshMarkers(){
+/* 🔥 realtime */
 
+db.collection("markers")
+.onSnapshot(snapshot=>{
+markers=[];
+snapshot.forEach(doc=>{
+markers.push({id:doc.id,...doc.data()});
+});
+refreshMarkers();
+},err=>{
+console.error(err);
+});
+
+/* render */
+
+function refreshMarkers(){
 markerObjects.forEach(m=>map.removeLayer(m));
 markerObjects=[];
 
-markers.forEach((m,index)=>{
+markers.forEach(m=>{
+if(!visibleCategories.includes(m.category)) return;
 
-if(!visibleCategories.includes(m.category))return;
-
-let categoryObj = categories.find(c=>c.name===m.category);
-let marker;
-
-if(categoryObj && categoryObj.icon){
-let customIcon=L.icon({
-iconUrl:categoryObj.icon,
-iconSize:[40,40],
-iconAnchor:[20,40]
-});
-marker=L.marker([m.lat,m.lng],{icon:customIcon});
-}else{
-marker=L.marker([m.lat,m.lng]);
-}
-
-marker.addTo(map);
+let marker=L.marker([m.lat,m.lng]).addTo(map);
 
 marker.bindPopup(`
-<div class="custom-popup">
 <b>${m.title}</b>
 ${m.image?`<img src="${m.image}" class="popup-img">`:""}
-หมวด: ${m.category}<br>
-<button onclick="deleteMarker(${index})">ลบหมุด</button>
-</div>
+<br>${m.category}<br>
+<button onclick="deleteMarker('${m.id}')">ลบ</button>
 `);
 
 markerObjects.push(marker);
-
 });
 }
 
-function deleteMarker(index){
-markers.splice(index,1);
-saveData();
-refreshMarkers();
+/* delete */
+
+async function deleteMarker(id){
+if(!confirm("ลบจริง?")) return;
+
+try{
+await db.collection("markers").doc(id).delete();
+}catch(err){
+console.error(err);
+alert("ลบไม่สำเร็จ");
 }
+}
+
+/* filter */
 
 function toggleCategory(cat,show){
 if(show){
-if(!visibleCategories.includes(cat))
-visibleCategories.push(cat);
+if(!visibleCategories.includes(cat)) visibleCategories.push(cat);
 }else{
 visibleCategories=visibleCategories.filter(c=>c!==cat);
 }
 refreshMarkers();
 }
 
-function exportData(){
-let data={markers,categories};
-let blob=new Blob([JSON.stringify(data)],{type:"application/json"});
-let url=URL.createObjectURL(blob);
-let a=document.createElement("a");
-a.href=url;
-a.download="map-backup.json";
-a.click();
-URL.revokeObjectURL(url);
-}
+/* menu */
 
-function importData(event){
-let file=event.target.files[0];
-let reader=new FileReader();
-reader.onload=function(e){
-let data=JSON.parse(e.target.result);
-markers=Array.isArray(data.markers)?data.markers:[];
-categories=Array.isArray(data.categories)?data.categories:[{name:"ทั่วไป",icon:""}];
-saveData();
-refreshCategoryUI();
-refreshMarkers();
-};
-reader.readAsText(file);
-}
-
-document.querySelectorAll(".menu-header").forEach(header=>{
-header.addEventListener("click",()=>{
-header.parentElement.classList.toggle("active");
-});
+document.querySelectorAll(".menu-header").forEach(h=>{
+h.onclick=()=>h.parentElement.classList.toggle("active");
 });
 
+/* init */
 refreshCategoryUI();
-refreshMarkers();
 
 </script>
 </body>
