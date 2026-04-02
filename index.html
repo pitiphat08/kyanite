@@ -35,10 +35,6 @@ align-items:center;
 gap:6px;
 margin-bottom:4px;
 }
-#categoryFilters input[type="checkbox"]{
-width:auto;
-margin:0;
-}
 
 /* popup */
 .leaflet-popup-content-wrapper{
@@ -62,6 +58,7 @@ margin:6px 0;
 <body>
 
 <div id="sidebar">
+
 <div class="menu-section">
 <div class="menu-header">📍 เพิ่มหมุด</div>
 <div class="menu-content">
@@ -96,6 +93,7 @@ margin:6px 0;
 <input type="file" onchange="importData(event)">
 </div>
 </div>
+
 </div>
 
 <div id="map"></div>
@@ -117,7 +115,6 @@ var mapMinResolution=Math.pow(2,mapMaxZoom);
 crs.scale=function(z){return Math.pow(2,z)/mapMinResolution;};
 crs.zoom=function(s){return Math.log(s*mapMinResolution)/Math.LN2;};
 
-/* ✅ สร้าง map ก่อน */
 var map=L.map('map',{
     minZoom:mapMinZoom,
     maxZoom:mapMaxZoom,
@@ -125,21 +122,18 @@ var map=L.map('map',{
     maxBoundsViscosity:0.3
 });
 
-/* bounds */
 var southWest=crs.unproject(L.point(mapExtent[0],mapExtent[1]));
 var northEast=crs.unproject(L.point(mapExtent[2],mapExtent[3]));
 var bounds=L.latLngBounds(southWest,northEast);
 
-/* tile */
 L.tileLayer('{z}/{x}/{y}.png',{
     minZoom:mapMinZoom,
     maxZoom:mapMaxZoom,
     noWrap:true
 }).addTo(map);
 
-/* ✅ ตั้งค่าหลังสร้าง map */
 map.fitBounds(bounds);
-map.setMaxBounds(bounds.pad(0.5)); // สำคัญ!
+map.setMaxBounds(bounds.pad(0.5));
 
 /* ================= DATA ================= */
 
@@ -182,13 +176,16 @@ ${cat.name}
 </label>`;
 });
 
-visibleCategories=categories.map(c=>c.name);
+visibleCategories=[...categories.map(c=>c.name)];
 }
 
 function addCategory(){
 let name=document.getElementById("newCategory").value.trim();
 let icon=document.getElementById("newCategoryIcon").value.trim();
-if(!name) return;
+
+if(!name) return alert("ห้ามชื่อว่าง");
+if(categories.some(c=>c.name===name)) return alert("ชื่อซ้ำ");
+
 categories.push({ name, icon });
 saveData();
 refreshCategoryUI();
@@ -197,8 +194,11 @@ refreshMarkers();
 
 function deleteCategory(){
 let selected=document.getElementById("deleteCategorySelect").value;
+if(!confirm("ลบหมวดนี้?")) return;
+
 categories=categories.filter(c=>c.name!==selected);
 markers=markers.filter(m=>m.category!==selected);
+
 saveData();
 refreshCategoryUI();
 refreshMarkers();
@@ -207,6 +207,8 @@ refreshMarkers();
 /* ================= MARKER ================= */
 
 function startAddMarker(){
+alert("คลิกบนแผนที่เพื่อวางหมุด");
+
 map.once("click",function(e){
 let title=document.getElementById("title").value;
 let image=document.getElementById("image").value;
@@ -246,12 +248,16 @@ refreshMarkers();
 
 function toggleCategory(cat,show){
 if(show){
-visibleCategories.push(cat);
+    if(!visibleCategories.includes(cat)){
+        visibleCategories.push(cat);
+    }
 }else{
-visibleCategories=visibleCategories.filter(c=>c!==cat);
+    visibleCategories = visibleCategories.filter(c=>c!==cat);
 }
 refreshMarkers();
 }
+
+/* ================= BACKUP ================= */
 
 function exportData(){
 let blob=new Blob([JSON.stringify({markers,categories})]);
@@ -273,6 +279,14 @@ refreshMarkers();
 };
 reader.readAsText(e.target.files[0]);
 }
+
+/* ================= MENU TOGGLE ================= */
+
+document.querySelectorAll(".menu-header").forEach(header=>{
+    header.addEventListener("click",()=>{
+        header.parentElement.classList.toggle("active");
+    });
+});
 
 /* init */
 refreshCategoryUI();
